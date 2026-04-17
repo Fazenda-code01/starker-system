@@ -2,41 +2,15 @@ import json
 import requests
 import re
 import os
+from http.server import BaseHTTPRequestHandler
 
-# 🔐 CHAVE SEGURA (vem da Vercel depois)
+# 🔐 CHAVE SEGURA
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 SYSTEM_PROMPT = """Você é o CHATSTARKER. Unidade de Qualificação de Elite da STARKER.
-
 Sua função é filtrar empresários e proteger a agenda.
+TRIAGEM OBRIGATÓRIA: Nicho, Tempo de operação e Faturamento mensal."""
 
-TRIAGEM OBRIGATÓRIA:
-- Nicho
-- Tempo de operação
-- Faturamento mensal
-
-REGRAS:
-
-1. Faturamento < 50.000:
-"O modelo STARKER é projetado para escala. No seu estágio atual, foque em validação antes de aplicar engenharia."
-Encerrar.
-
-2. Sem empresa real:
-"Não trabalhamos com hipóteses. Retorne quando houver operação real."
-Encerrar.
-
-3. Aprovado:
-Tom frio e direto.
-
-Encaminhar:
-
-"Acesse agora:
-https://wa.me/5592981660856
-
-Sem estrutura, não há escala."
-"""
-
-# 🔎 Detecta faturamento
 def is_low_revenue(message):
     match = re.search(r'(\d+)', message.replace('.', '').replace(',', ''))
     if match:
@@ -45,63 +19,34 @@ def is_low_revenue(message):
             return True
     return False
 
-# 🔎 Detecta "não tenho empresa"
 def no_business(message):
     keywords = ["ideia", "começar", "vou abrir", "pretendo", "planejando"]
     return any(k in message.lower() for k in keywords)
 
-def handler(request):
-    try:
-        body_raw = request.body if hasattr(request, 'body') else request.rfile.read(int(request.headers['Content-Length']))
-        body = json.loads(body_raw)
+class handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        body = json.loads(post_data)
         user_message = body.get("message", "")
 
         # 🚫 BLOQUEIOS
         if is_low_revenue(user_message):
-            return {
-                "statusCode": 200,
-                "body": json.dumps({
-                    "reply": "O modelo STARKER é para escala. Foque em validação antes de avançar."
-                })
-            }
+            reply = "O modelo STARKER é para escala. Foque em validação antes de avançar."
+        elif no_business(user_message):
+            reply = "Não trabalhamos com hipóteses. Retorne quando houver operação real."
+        else:
+            # 🚀 GEMINI
+            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+            payload = {"contents": [{"parts": [{"text": SYSTEM_PROMPT + "\n\nUsuário: " + user_message}]}]}
+            
+            response = requests.post(url, json=payload)
+            result = response.json()
+            reply = result["candidates"][0]["content"]["parts"][0]["text"]
 
-        if no_business(user_message):
-            return {
-                "statusCode": 200,
-                "body": json.dumps({
-                    "reply": "Não trabalhamos com hipóteses. Retorne quando houver operação real."
-                })
-            }
-
-        # 🚀 GEMINI ATUALIZADO
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={API_KEY}"
-
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": SYSTEM_PROMPT + "\n\nUsuário: " + user_message}
-                    ]
-                }
-            ]
-        }
-
-        response = requests.post(url, json=payload)
-        result = response.json()
-
-        reply = result["candidates"][0]["content"]["parts"][0]["text"]
-
-        return {
-            "statusCode": 200,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*"
-            },
-            "body": json.dumps({"reply": reply})
-        }
-
-    except Exception as e:
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
-        }
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(json.dumps({"reply": reply}).encode())
+        return
