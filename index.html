@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>CHATSTARKER</title>
+
+<style>
+body {
+    background: #000;
+    color: #888;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+}
+
+#chat {
+    width: 650px;
+    margin: 60px auto;
+    border: 1px solid #111;
+    padding: 25px;
+    background: linear-gradient(180deg, #000 0%, #050505 100%);
+    box-shadow: 0 0 20px rgba(0,255,255,0.05);
+}
+
+#messages {
+    height: 400px;
+    overflow-y: auto;
+}
+
+.user {
+    color: #ffffff;
+    margin-bottom: 10px;
+}
+
+.bot {
+    color: #00eaff;
+    margin-bottom: 15px;
+}
+
+.loading {
+    color: #666;
+    font-style: italic;
+}
+
+input {
+    width: 100%;
+    background: #000;
+    border: none;
+    border-top: 1px solid #111;
+    color: #00eaff;
+    padding: 12px;
+    outline: none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="chat">
+    <div id="messages"></div>
+    <input id="input" placeholder="Digite sua mensagem..." />
+</div>
+
+<script>
+const input = document.getElementById("input");
+const messages = document.getElementById("messages");
+
+// Auto scroll
+function scrollToBottom() {
+    messages.scrollTop = messages.scrollHeight;
+}
+
+// Mensagem inicial
+messages.innerHTML += `<div class="bot">
+CHATSTARKER ONLINE<br><br>
+Protocolo de triagem iniciado.<br><br>
+Informe:<br>
+- Nicho<br>
+- Tempo de operação<br>
+- Faturamento mensal
+</div>`;
+
+scrollToBottom();
+
+input.addEventListener("keypress", async (e) => {
+    if (e.key === "Enter") {
+        const text = input.value.trim();
+        if (!text) return;
+
+        input.value = "";
+
+        // Mensagem usuário
+        messages.innerHTML += `<div class="user">> ${text}</div>`;
+        scrollToBottom();
+
+        // Loading
+        const loadingEl = document.createElement("div");
+        loadingEl.className = "loading";
+        loadingEl.innerText = "Processando...";
+        messages.appendChild(loadingEl);
+        scrollToBottom();
+
+        try {
+            const res = await fetch("/api/chat", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ message: text, history: [] })
+            });
+
+            const data = await res.json();
+
+            // Remove loading
+            loadingEl.remove();
+
+            // Resposta bot
+            messages.innerHTML += `<div class="bot">${data.reply}</div>`;
+            scrollToBottom();
+
+        } catch (err) {
+            loadingEl.remove();
+
+            messages.innerHTML += `<div class="bot">Erro de conexão com o servidor.</div>`;
+            scrollToBottom();
+        }
+    }
+});
+</script>
+
+</body>
+</html>
