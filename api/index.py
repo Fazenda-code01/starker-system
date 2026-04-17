@@ -37,7 +37,6 @@ class handler(BaseHTTPRequestHandler):
             
             response = requests.post(url, json=payload)
             result = response.json()
-            # Garante que a resposta existe antes de entregar
             try:
                 reply = result["candidates"][0]["content"]["parts"][0]["text"]
             except:
